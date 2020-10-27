@@ -10,12 +10,11 @@ namespace Olive.Aws.Ses
 {
     public class AwsSesEmailDispatcher : IEmailDispatcher
     {
-        public async Task Dispatch(MailMessage mail)
+        public async Task Dispatch(MailMessage mail, IEmailMessage _)
         {
             var request = CreateEmailRequest(mail);
 
-            using (var client = new AmazonSimpleEmailServiceClient(RuntimeIdentity.Credentials,
-                RuntimeIdentity.Region))
+            using (var client = new AmazonSimpleEmailServiceClient())
             {
                 var response = await client.SendEmailAsync(request);
                 if (response.HttpStatusCode != System.Net.HttpStatusCode.OK)

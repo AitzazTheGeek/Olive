@@ -1,59 +1,49 @@
+<img src="https://raw.githubusercontent.com/Geeksltd/Olive/master/Olive/Nuget.png"/>
+
 * Olive Core
     * [What is Olive?](README.md)
+    * [Getting Started (Console app)](Core/Setup.md)
     * [.NET Extensions](Core/Extensions.md)
-       * [Misc](Core/Extensions/Misc.md)
-       * [Boolean](Core/Extensions/Boolean.md)
-       * [ClaimsPrincipal](Core/Extensions/ClaimsPrincipal.md)
-       * [DataTable](Core/Extensions/DataTable.md)
-       * [DateTime](Core/Extensions/DateTime.md)
-       * [Delegates](Core/Extensions/Delegates.md)
-       * [Dictionary](Core/Extensions/Dictionary.md)
-       * [DirectoryInfo](Core/Extensions/DirectoryInfo.md)
-       * [Double](Core/Extensions/Double.md)
-       * [EmbeddedResource](Core/Extensions/EmbeddedResource.md)
-       * [Exception](Core/Extensions/Exception.md)
-       * [Expression](Core/Extensions/Expression.md)
-       * [FileInfoAsync](Core/Extensions/FileInfoAsync.md)
-       * [FileInfoSync](Core/Extensions/FileInfoSync.md)
-       * [FileInfo](Core/Extensions/FileInfo.md)
-       * [Http](Core/Extensions/Http.md)
-       * [Integer](Core/Extensions/Integer.md)       
-       * [Linq](Core/Extensions/Linq.md)       
-       * [Random](Core/Extensions/Random.md)       
-       * [RangeInt](Core/Extensions/RangeInt.md)       
-       * [Range](Core/Extensions/Range.md)       
-       * [Reflection](Core/Extensions/Reflection.md)       
-       * [Stream](Core/Extensions/Stream.md)             
-       * [StringConversion](Core/Extensions/StringConversion.md)       
-       * [StringIP](Core/Extensions/StringIP.md)       
-       * [String](Core/Extensions/String.md)       
-       * [StringBuilder](Core/Extensions/StringBuilder.md)       
-       * [TimeSpan](Core/Extensions/TimeSpan.md)       
-       * [Uri](Core/Extensions/Uri.md)       
-       * [WebClient](Core/Extensions/WebClient.md)       
-       * [Xml](Core/Extensions/Xml.md)       
     * [Utility classes](Core/Utilities.md)
     * [change log](ChangeLog.md)
     
 * Olive Entities
     * [Overview](Entities/Overview.md)
+    * [Lifecycle events](Entities/Lifecycle.md)
+    * [Ado.NET & Raw data access](Entities/RawDataAccess.md)
     * [Olive ORM](Entities/ORM.md)
        * [Caching](Entities/Cache.md)
-    * [Ado.NET and Raw data access](Entities/AdoNet.md)
     * [Database Api](Entities/Database.md)
        * [IDatabaseQuery](Entities/IDatabaseQuery.md)
     * [Provider model and DI](Entities/DI.md)
     * [Files and Blobs](Entities/Blob.md)
+    * [Custom data type](Entities/CustomDataType.md)
+    * [Using C# Enums](Entities/CSharpEnumType.md)
 
 * Microservices Architecture
-    * [Overview](Microservices/Overview.md)
+    * [Understanding Microservices](Microservices/UnderstandingMicroservices.md)
+    * [Understanding Docker](Microservices/DockerMicroservices.md)
+    * [Distributed Data](Microservices/DistributedDataInMicroservices.md)
+    * [Microservice Boundaries](Microservices/MicroserviceBoundaries.md)
+    * [Intra-service Communication](Microservices/IntraServiceCommunication.md)
+    * [Implementing Resilient Apps](Microservices/ImplementingResilientApplications.md)
+    * [Development Process for Docker-Based Apps](Microservices/DockerBasedApplications.md)
+    * [Security in Microservices](Microservices/SecurityInMicroservices.md)
+    * [Loading a typescript service module](Microservices/LoadTypescriptServiceFromController.md)
+    * [Use AWS S3 as the temp folder to upload files](Microservices/AwsS3TempBlobStorage.md)
+ 
+* Microservices in Olive
+    * [Access Hub: Composite UI](Microservices/Overview.md)  
     * [Environment Setup](Microservices/Setup.md)
         * [Private Nuget Server](Microservices/PrivateNuget.md)
     * [Security (Auth)](Microservices/Security.md)
     * [Urls and Addressing](Microservices/Addressing.md)
     * [Creating a new microservice](Microservices/Create.New.md)
+ 
 
 * DevOps
+    * [Introduction](DevOps/Introduction.md)
+    * [DevOps Automation Service](DevOps/Automation-Service.md)
     * [Docker support](DevOps/Docker.md)
     * [Jenkins](DevOps/Jenkins.md)
     * [Jenkinsfile template](DevOps/MSharp-Jenkinsfile.md)
@@ -61,21 +51,26 @@
     * [Cluster setup (Kubernetes & AWS)](DevOps/Cluster-setup.md)
     * [Security](DevOps/Security.md)
     * [Service preparation](DevOps/Service-preparation.md)
+    * [Serverless deployment](DevOps/Serverless.md)
         
-* Web Api and Integration
+* Sync integration: WebApi
     * [RESTful WebApi](Api/WebApi.md)
     * [ApiClient](Api/ApiClient.md)
     * [Api Proxy](Api/Proxy.md)
     * [Api Versioning](Api/Versioning.md)
+
+* Async integration: EventBus, Queues
+    * [EventBus](Api/EventBus.md)
+    * [EventBus Commands](Api/EventBusCommands.md)
     * [Data Replication](Api/Replication.md)
 
-* Olive Javascript Fx (MvcJS)
+* Javascript Fx (MvcJS)
     * [Overview](MvcJS/Overview.md)
     * [Ajax Lifecycle](MvcJS/AjaxLifecycle.md)
     * [Loading custom modules and libraries](MvcJS/Library.md)
+    * [Migration to version 2](MvcJS/MigrationAndDI.md)
     
-    
-* Olive Plugins
+* Plugins
     * [Compression](Services/Compression.md)
     * [Email notifications](Services/Email.md)
     * [SMS notifications](Services/SMS.md)
@@ -87,11 +82,15 @@
     * [Push Notifications](Services/PushNotification.md)
     * [Image optimization]()
     * [Website IP Filter]()
+    * [AWS integration](Services/Aws.md)
+    * [Captcha](Security/Captcha.md)
 
 * Security
     * [Olive Security Overview](Security/Security.md)
+    * [Captcha](Security/Captcha.md)
     * [Config](Security/Config.md)
     * [Impersonation]()
+    * [Encryption and Decryption](Security/Encryption%20and%20Decryption.md)
     
 * Logging & Audit
     * [Olive Logging Overview](Logging/Logging.md)

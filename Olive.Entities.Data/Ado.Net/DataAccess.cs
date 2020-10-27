@@ -2,20 +2,19 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Olive.Entities.Data
 {
-    public abstract class DataAccess
+    public abstract partial class DataAccess
     {
         public static string GetCurrentConnectionString()
         {
             string result;
 
             if (DatabaseContext.Current != null) result = DatabaseContext.Current.ConnectionString;
-            else result = Config.GetConnectionString("Default");
+            else result = Context.Current.GetService<IConnectionStringProvider>().GetConnectionString();
 
             if (result.IsEmpty())
                 throw new Exception("No 'AppDatabase' connection string is specified in the application config file.");
@@ -30,10 +29,21 @@ namespace Olive.Entities.Data
     public class DataAccess<TConnection> : DataAccess, IDataAccess
         where TConnection : DbConnection, new()
     {
-        public DataAccess(string connectionString = null)
+        readonly IParameterFactory ParameterFactory;
+        readonly IDatabaseProviderConfig ProviderConfig;
+        readonly ISqlCommandGenerator SqlCommandGenerator;
+        readonly string ConnectionString;
+
+        public DataAccess(
+            IDatabaseProviderConfig providerConfig,
+            ISqlCommandGenerator sqlCommandGenerator,
+            string connectionString = null,
+            IParameterFactory parameterFactory = null)
         {
-            if (connectionString.IsEmpty())
-                connectionString = GetCurrentConnectionString();
+            ConnectionString = connectionString;
+            SqlCommandGenerator = sqlCommandGenerator;
+            ParameterFactory = parameterFactory ?? new DefaultParameterFactory<TConnection>();
+            ProviderConfig = providerConfig;
         }
 
         /// <summary>
@@ -49,11 +59,11 @@ namespace Olive.Entities.Data
         /// <summary>
         /// Creates a new DB Connection to database with the given connection string.
         /// </summary>		
-        public async Task<IDbConnection> CreateConnection(string connectionString = null)
+        public async Task<IDbConnection> CreateConnection()
         {
             var result = new TConnection
             {
-                ConnectionString = connectionString.Or(GetCurrentConnectionString())
+                ConnectionString = ConnectionString.Or(GetCurrentConnectionString())
             };
 
             await result.OpenAsync();
@@ -93,6 +103,9 @@ namespace Olive.Entities.Data
                 parameter.ParameterName = param.ParameterName;
                 parameter.Value = param.Value;
 
+                if (parameter.DbType != param.DbType)
+                    parameter.DbType = param.DbType;
+
                 command.Parameters.Add(parameter);
             }
 
@@ -101,7 +114,8 @@ namespace Olive.Entities.Data
 
         DataAccessProfiler.Watch StartWatch(string command)
         {
-            if (Database.Configuration.Profile) return DataAccessProfiler.Start(command);
+            if (ProviderConfig.Configuration?.Profile == true)
+                return DataAccessProfiler.Start(command);
             else return null;
         }
 
@@ -110,6 +124,9 @@ namespace Olive.Entities.Data
         /// </summary>
         public async Task<int> ExecuteNonQuery(string command, CommandType commandType = CommandType.Text, params IDataParameter[] @params)
         {
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-US");
+            System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en-US");
+
             var dbCommand = await CreateCommand(commandType, command, @params);
 
             var watch = StartWatch(command);
@@ -189,7 +206,7 @@ namespace Olive.Entities.Data
             {
                 var result = await dbCommand.ExecuteScalarAsync();
 
-                if (!command.ToLowerOrEmpty().StartsWith("select "))
+                if (command.Contains("UPDATE ") || !command.ToLowerOrEmpty().StartsWith("select "))
                     DatabaseStateChangeCommand.Raise(command, commandType, @params);
 
                 return result;
@@ -269,5 +286,18 @@ namespace Olive.Entities.Data
                 CloseConnection(connection);
             }
         }
+
+        public IDataParameter CreateParameter(string name, object value) =>
+            CreateParameter(name, value, value is DateTime ? (DbType?)DbType.DateTime2 : null);
+
+        public IDataParameter CreateParameter(string name, object value, DbType? dbType)
+        {
+            if (value == null) value = DBNull.Value;
+            else if (value is Blob blob) value = blob.FileName;
+
+            return ParameterFactory.CreateParameter(name, value, dbType);
+        }
+
+        public ISqlCommandGenerator GetSqlCommandGenerator() => SqlCommandGenerator;
     }
 }

@@ -1,4 +1,4 @@
-﻿using Amazon.S3;
+using Amazon.S3;
 using Amazon.S3.Model;
 using Olive.Entities;
 using System;
@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Olive.BlobAws
 {
@@ -16,7 +17,8 @@ namespace Olive.BlobAws
     {
         const string FILE_NOT_FOUND = "NotFound";
 
-        AmazonS3Client CreateClient() => new AmazonS3Client();
+        AmazonS3Client CreateClient => new AmazonS3Client();
+        static ILogger Log => Olive.Log.For(typeof(S3BlobStorageProvider));
 
         public bool CostsToCheckExistence() => true;
 
@@ -25,16 +27,28 @@ namespace Olive.BlobAws
         /// </summary>
         public async Task SaveAsync(Blob document)
         {
-            using (var client = CreateClient())
+            using (var client = CreateClient)
             {
-                var request = await CreateUploadRequest(document);
-                var response = await client.PutObjectAsync(request);
-
-                switch (response.HttpStatusCode)
+                try
                 {
-                    case System.Net.HttpStatusCode.OK:
-                    case System.Net.HttpStatusCode.Accepted: return;
-                    default: throw new Exception($"AWS Upload for key {request.Key} returned: " + response.HttpStatusCode);
+
+                    Log.Debug("Blob create upload request");
+                    var request = await CreateUploadRequest(document);
+                    Log.Debug("Blob create upload object");
+                    var response = await client.PutObjectAsync(request);
+                    Log.Debug("Blob response code: " + response.HttpStatusCode);
+
+                    switch (response.HttpStatusCode)
+                    {
+                        case System.Net.HttpStatusCode.OK:
+                        case System.Net.HttpStatusCode.Accepted: return;
+                        default: throw new Exception($"AWS Upload for key {request.Key} returned: " + response.HttpStatusCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Create request ex: " + ex.Message);
+                    throw ex;
                 }
             }
         }
@@ -43,9 +57,9 @@ namespace Olive.BlobAws
         {
             try
             {
-                using (var client = CreateClient())
+                using (var client = CreateClient)
                 {
-                    return await client.GetObjectMetadataAsync(AWSInfo.S3BucketName, GetKey(document)) != null;
+                    return await client.GetObjectMetadataAsync(AWSInfo.S3BucketName, document.GetKey()) != null;
                 }
             }
             catch (AmazonS3Exception ex)
@@ -56,15 +70,28 @@ namespace Olive.BlobAws
             }
         }
 
-        public Task<byte[]> LoadAsync(Blob document) => Load(GetKey(document));
+        public async Task<byte[]> LoadAsync(Blob document)
+        {
+            var key = document.GetKey();
+
+            try
+            {
+                return await Load(document.GetKey());
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, $"Failed to load s3 document with {key} key");
+                throw;
+            }
+        }
 
         /// <summary>
         /// Deletes a document with the specified key name on the Amazon S3 server.
         /// </summary>
         public async Task DeleteAsync(Blob document)
         {
-            var key = GetKey(document);
-            using (var client = CreateClient())
+            var key = document.GetKey();
+            using (var client = CreateClient)
             {
                 var response = await client.DeleteObjectAsync(AWSInfo.S3BucketName, key);
 
@@ -80,7 +107,7 @@ namespace Olive.BlobAws
 
         async Task<byte[]> Load(string documentKey)
         {
-            using (var client = CreateClient())
+            using (var client = CreateClient)
             {
                 var request = CreateGetObjectRequest(documentKey);
 
@@ -109,7 +136,7 @@ namespace Olive.BlobAws
             var oldVersionKeys = await GetOldVersionKeys(document);
 
             if (oldVersionKeys.Any())
-                using (var client = CreateClient())
+                using (var client = CreateClient)
                 {
                     var request = CreateDeleteOldsRequest(oldVersionKeys);
                     var response = await client.DeleteObjectsAsync(request);
@@ -127,11 +154,6 @@ namespace Olive.BlobAws
         async Task<IEnumerable<KeyVersion>> GetOldVersionKeys(Blob document)
           => await GetOldKeys(document).Select(s => new KeyVersion { Key = s });
 
-        string GetKey(Blob document)
-        {
-            return (document.FolderName + "/" + document.OwnerId()).KeepReplacing("//", "/").TrimStart("/");
-        }
-
         DeleteObjectsRequest CreateDeleteOldsRequest(IEnumerable<KeyVersion> oldKeys)
         {
             return new DeleteObjectsRequest
@@ -143,9 +165,9 @@ namespace Olive.BlobAws
 
         async Task<IEnumerable<string>> GetOldKeys(Blob document)
         {
-            var key = GetKey(document);
+            var key = document.GetKey();
 
-            using (var client = CreateClient())
+            using (var client = CreateClient)
             {
                 var request = CreateGetObjectsRequest(document);
                 return (await client.ListObjectsAsync(request))
@@ -155,7 +177,7 @@ namespace Olive.BlobAws
 
         ListObjectsRequest CreateGetObjectsRequest(Blob document)
         {
-            var key = GetKey(document);
+            var key = document.GetKey();
             var prefix = key.TrimEnd(document.FileExtension);
 
             return new ListObjectsRequest
@@ -173,7 +195,7 @@ namespace Olive.BlobAws
             return new PutObjectRequest
             {
                 BucketName = AWSInfo.S3BucketName,
-                Key = GetKey(document),
+                Key = document.GetKey(),
                 InputStream = new MemoryStream(await document.GetFileDataAsync())
             };
         }

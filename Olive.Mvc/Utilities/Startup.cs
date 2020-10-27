@@ -1,22 +1,25 @@
-﻿using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.AspNetCore.Mvc.Razor;
-using Microsoft.AspNetCore.Mvc.Razor.Compilation;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Serialization;
-using Olive.Entities;
-using Olive.Entities.Data;
-using Olive.Security;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.Razor;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Olive.Entities;
+using Olive.Entities.Data;
+using Olive.Security;
 
 namespace Olive.Mvc
 {
@@ -24,11 +27,11 @@ namespace Olive.Mvc
     {
         const int DEFAULT_SESSION_TIMEOUT = 20;
 
-        protected readonly IHostingEnvironment Environment;
+        protected readonly IWebHostEnvironment Environment;
         protected readonly IConfiguration Configuration;
-        protected readonly IServiceCollection Services;
+        protected IServiceCollection Services { get; private set; }
 
-        protected Startup(IHostingEnvironment env, IConfiguration config, ILoggerFactory loggerFactory)
+        protected Startup(IWebHostEnvironment env, IConfiguration config, ILoggerFactory loggerFactory)
         {
             Environment = env;
             Configuration = config;
@@ -37,22 +40,34 @@ namespace Olive.Mvc
 
         public virtual void ConfigureServices(IServiceCollection services)
         {
-            Context.Initialize(services);
+            Configuration.MergeEnvironmentVariables();
+            Services = services;
             services.AddHttpContextAccessor();
 
-            services.AddSingleton(typeof(IActionContextAccessor), typeof(ActionContextAccessor));
-            services.AddDatabase();
+            services.AddSingleton<IActionContextAccessor, ActionContextAccessor>();
+            services.TryAddTransient<IFileAccessorFactory, FileAccessorFactory>();
+            services.AddDatabase(Configuration);
             services.AddHttpClient();
 
             ConfigureMvc(services.AddMvc());
 
+            services.AddSingleton<IValidationAttributeAdapterProvider, OliveValidationAttributeAdapterProvider>();
+
             services.AddResponseCompression();
             services.AddResponseCaching();
+            services.AddDefaultAudit();
 
             services.Configure<RazorViewEngineOptions>(o =>
             o.ViewLocationExpanders.Add(new ViewLocationExpander()));
 
+            services.TryAddTransient<IFileRequestService, DiskFileRequestService>();
+            services.TryAddTransient<IFileUploadMarkupGenerator, DefaultFileUploadMarkupGenerator>();
+
             ConfigureAuthentication(services.AddAuthentication(config => config.DefaultScheme = "Cookies"));
+
+            services.AddControllersWithViews().AddJsonOptions(opt => opt.JsonSerializerOptions.PropertyNamingPolicy = null);
+            // Caused "Urecognized SameSiteMode value -1
+            //services.ConfigureNonBreakingSameSiteCookies();
         }
 
         protected virtual void ConfigureAuthentication(AuthenticationBuilder auth)
@@ -63,21 +78,29 @@ namespace Olive.Mvc
         protected virtual void ConfigureMvc(IMvcBuilder mvc)
         {
             mvc.AddMvcOptions(x => x.ModelBinderProviders.Insert(0, new OliveBinderProvider()));
+            mvc.AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null);
 
-            mvc.AddJsonOptions(o => o.SerializerSettings.ContractResolver = new DefaultContractResolver());
+            //mvc.ConfigureApplicationPartManager(manager =>
+            //{
+            //    manager.FeatureProviders.RemoveWhere(x => x is MetadataReferenceFeatureProvider);
+            //    manager.FeatureProviders.Add(new ReferencesMetadataReferenceFeatureProvider());
+            //});
 
-            mvc.ConfigureApplicationPartManager(manager =>
+            mvc.AddMvcOptions(options =>
             {
-                manager.FeatureProviders.RemoveWhere(x => x is MetadataReferenceFeatureProvider);
-                manager.FeatureProviders.Add(new ReferencesMetadataReferenceFeatureProvider());
+                options.ModelMetadataDetailsProviders.Add(
+                    new SuppressChildValidationMetadataProvider(typeof(IEntity)));
+
+                options.EnableEndpointRouting = false;
             });
         }
 
         public virtual void Configure(IApplicationBuilder app)
         {
-            Context.Current.Set(app.ApplicationServices).Set(Environment);
+            app.UseMiddleware<PerformanceMonitoringMiddleware>();
 
-            app.ApplicationServices.GetService<IDatabase>().Configure();
+            Context.Initialize(app.ApplicationServices, () => app.ApplicationServices.GetService<IHttpContextAccessor>()?.HttpContext?.RequestServices);
+            Context.Current.GetService<IDatabaseProviderConfig>().Configure();
 
             if (Environment.IsDevelopment())
                 app.UseMiddleware<DevCommandMiddleware>();
@@ -95,6 +118,7 @@ namespace Olive.Mvc
 
         protected virtual void ConfigureSecurity(IApplicationBuilder app)
         {
+            app.UseCookiePolicy();
             app.UseMicroserviceAccessKeyAuthentication();
             app.UseAuthentication();
             app.UseMiddleware<SplitRoleClaimsMiddleware>();

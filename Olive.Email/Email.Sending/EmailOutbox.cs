@@ -17,9 +17,9 @@ namespace Olive.Email
         EmailConfiguration Config;
         ILogger<EmailOutbox> Log;
 
-        public AsyncEvent<EmailSendingEventArgs> Sending { get; }
-        public AsyncEvent<EmailSendingEventArgs> Sent { get; }
-        public AsyncEvent<EmailSendingEventArgs> SendError { get; }
+        public event AwaitableEventHandler<EmailSendingEventArgs> Sending;
+        public event AwaitableEventHandler<EmailSendingEventArgs> Sent;
+        public event AwaitableEventHandler<EmailSendingEventArgs> SendError;
         public IEmailDispatcher Dispatcher { get; }
         public IMailMessageCreator MessageCreator { get; }
 
@@ -32,9 +32,6 @@ namespace Olive.Email
             Database = database;
             Config = config.GetSection("Email").Get<EmailConfiguration>();
             Log = log;
-            Sending = new AsyncEvent<EmailSendingEventArgs>();
-            Sent = new AsyncEvent<EmailSendingEventArgs>();
-            SendError = new AsyncEvent<EmailSendingEventArgs>();
         }
 
         async Task<IEmailMessage[]> GetUnsentEmails()
@@ -47,9 +44,12 @@ namespace Olive.Email
 
         public async Task SendAll(TimeSpan? delayPerSend = null)
         {
+            Log.Info("Sending all ...");
             using (await AsyncLock.Lock())
             {
                 var toSend = await GetUnsentEmails();
+
+                Log.Info($"Loaded {toSend.Count()} emails to send ...");
 
                 foreach (var mail in toSend)
                 {
@@ -64,10 +64,15 @@ namespace Olive.Email
                         }
                     }
 
-                    try { await Send(mail); }
+                    try
+                    {
+                        Log.Info($"Sending {mail.GetId()?.ToString().Or(mail.To.Substring(3))} ...");
+                        await Send(mail);
+                        Log.Info($"Sent {mail.GetId()?.ToString().Or(mail.To.Substring(3))} ...");
+                    }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Could not send a queued email message " + mail.GetId());
+                        Log.Error(ex, "Could not send a queued email message " + mail.GetId() + " because " + ex.ToFullMessage());
                     }
                 }
             }
@@ -97,7 +102,7 @@ namespace Olive.Email
                 try
                 {
                     await Sending.Raise(new EmailSendingEventArgs(message, mail));
-                    await Dispatcher.Dispatch(mail);
+                    await Dispatcher.Dispatch(mail, message);
 
                     if (!message.IsNew) await Database.Delete(message);
                     await Sent.Raise(new EmailSendingEventArgs(message, mail));

@@ -1,5 +1,4 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,19 +7,21 @@ using System.Threading.Tasks;
 
 namespace Olive
 {
-    class IOSubscriber<TMessage> where TMessage : IEventBusMessage
+    class IOSubscriber
     {
         AsyncLock SyncLock = new AsyncLock();
-        Func<TMessage, Task> Handler;
+        Func<string, Task> Handler;
         DirectoryInfo Folder;
 
-        public IOSubscriber(IOEventBusQueue queue, Func<TMessage, Task> handler)
+        public IOSubscriber(IOEventBusQueue queue, Func<string, Task> handler)
         {
             Folder = queue.Folder;
             Handler = handler;
         }
 
         public void Start() => new Thread(KeepPolling).Start();
+
+        public Task PullAll() => RunHandler(PullStrategy.UntilEmpty);
 
         void KeepPolling()
         {
@@ -31,22 +32,26 @@ namespace Olive
             watcher.EnableRaisingEvents = true;
         }
 
-        async Task<KeyValuePair<FileInfo, TMessage>> FetchNext()
+        static async Task<string> ReadFile(FileInfo item)
         {
-            var item = Folder.GetFiles().OrderBy("CreationTimeUtc").FirstOrDefault();
+            while (true)
+                try
+                {
+                    return await item.ReadAllTextAsync();
+                }
+                catch (System.IO.IOException)
+                {
+                }
+        }
 
-            if (item == null) return new KeyValuePair<FileInfo, TMessage>(null, default(TMessage));
+        internal static async Task<KeyValuePair<FileInfo, string>> FetchOnce(DirectoryInfo folder)
+        {
+            var item = folder.GetFiles().OrderBy("CreationTimeUtc").FirstOrDefault();
 
-            var content = await item.ReadAllTextAsync();
-            try
-            {
-                var @event = JsonConvert.DeserializeObject<TMessage>(content);
-                return new KeyValuePair<FileInfo, TMessage>(item, @event);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Failed to deserialize event message to " + typeof(TMessage).FullName + ":\r\n" + content, ex);
-            }
+            if (item == null) return new KeyValuePair<FileInfo, string>(null, null);
+
+            var content = await ReadFile(item);
+            return new KeyValuePair<FileInfo, string>(item, content);
         }
 
         async void OnFoundNewFile(object sender, FileSystemEventArgs e)
@@ -57,7 +62,7 @@ namespace Olive
 
         async Task<bool> HandleNext()
         {
-            var item = await FetchNext();
+            var item = await FetchOnce(Folder);
             if (item.Key == null) return false;
 
             try
@@ -75,15 +80,20 @@ namespace Olive
             return true;
         }
 
-        async void RunHandler()
+        async Task RunHandler(PullStrategy strategy = PullStrategy.KeepPulling)
         {
-            while (true)
+            do
             {
+
                 using (await SyncLock.Lock())
                     if (await HandleNext()) continue;
 
-                Thread.Sleep(5000);
+                if (strategy == PullStrategy.KeepPulling)
+                    Thread.Sleep(5000);
+                else
+                    break;
             }
+            while (true);
         }
     }
 }

@@ -9,7 +9,7 @@
     {
         bool IsCacheable()
         {
-            if (PageSize.HasValue) return false;
+            if (TakeTop.HasValue || PageSize.HasValue) return false;
 
             if (Criteria.Except(typeof(DirectDatabaseCriterion)).Any(c => c.PropertyName.Contains(".")))
                 return false; // This doesn't work with cache expiration rules.
@@ -23,33 +23,14 @@
             return true;
         }
 
-        string GetCacheKey()
-        {
-            var r = new StringBuilder();
-            r.Append(EntityType.GetCachedAssemblyQualifiedName());
-
-            r.Append(':');
-
-            foreach (var c in Criteria)
-            {
-                r.Append(c.ToString());
-                r.Append('|');
-            }
-
-            if (TakeTop.HasValue) r.Append("|N:" + TakeTop);
-
-            r.Append(OrderByParts.Select(x => x.ToString()).ToString(",").WithPrefix("|S:"));
-
-            return r.ToString();
-        }
-
         public async Task<IEnumerable<IEntity>> GetList()
         {
             if (!IsCacheable()) return await LoadFromDatabase();
 
-            var cacheKey = GetCacheKey();
+            if (Criteria.Any() || Context.Current.Database().AnyOpenTransaction())
+                return await LoadFromDatabaseAndCache();
 
-            var result = Cache.GetList(EntityType, cacheKey)?.Cast<IEntity>();
+            var result = Cache.GetList(EntityType)?.Cast<IEntity>();
             if (result != null)
             {
                 await LoadIncludedAssociations(result);
@@ -58,9 +39,7 @@
 
             result = await LoadFromDatabaseAndCache();
 
-            // If there is no transaction open, cache it:
-            if (!Context.Current.Database().AnyOpenTransaction())
-                Cache.AddList(EntityType, cacheKey, result);
+            Cache.AddList(EntityType, result);
 
             return result;
         }
@@ -70,16 +49,24 @@
             List<IEntity> result;
             if (NeedsTypeResolution())
             {
-                var queries = ResolveDataProviders().Select(p => p.GetList(this));
+                var queries = EntityFinder.FindPossibleTypes(EntityType, mustFind: true)
+                    .Select(t => CloneFor(t))
+                    .Select(q => q.Provider.GetList(q));
+
                 result = await queries.SelectManyAsync(x => x).ToList();
             }
             else
                 result = await Provider.GetList(this).ToList();
 
-            if (OrderByParts.None())
+            foreach (var item in result)
+                await Entity.Services.RaiseOnLoaded(item);
+
+            if (OrderByParts.None() && !SkipAutoSortAttribute.HasAttribute(EntityType))
             {
-                // TODO: If the entity is sortable by a single DB column, then automatically add that to the DB call.
-                result.Sort();
+                if (EntityType.Implements<ISortable>())
+                    result = result.OrderBy(x => (x as ISortable).Order).ToList();
+                else
+                    result.Sort();
             }
 
             await LoadIncludedAssociations(result);
@@ -106,7 +93,6 @@
                 if (inCache != null) result.Add(inCache);
                 else
                 {
-                    await Entity.Services.RaiseOnLoaded(item);
                     (Context.Current.Database() as Database)?.TryCache(item, timestamp);
                     result.Add(item);
                 }
@@ -124,7 +110,7 @@
         public async Task<IEntity> FirstOrDefault()
         {
             TakeTop = 1;
-            return (await Provider.GetList(this)).FirstOrDefault();
+            return await GetList().FirstOrDefault();
         }
     }
 

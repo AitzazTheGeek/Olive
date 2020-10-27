@@ -123,6 +123,10 @@ namespace Olive
         this Task<IEnumerable<TSource>> @this, Func<TSource, bool> func)
             => @this.Get(x => x.OrEmpty().SingleOrDefault(func));
 
+        public static Task<TSource> SingleOrDefaultAsync<TSource>(
+        this Task<IEnumerable<TSource>> @this, Func<TSource, Task<bool>> func)
+         => @this.Get(x => x.OrEmpty().SingleOrDefault(func));
+
         public static Task<IEnumerable<TSource>> Union<TSource>(
         this Task<IEnumerable<TSource>> @this, IEnumerable<TSource> second)
             => @this.Get(x => x.OrEmpty().Union(second));
@@ -134,6 +138,10 @@ namespace Olive
         public static Task<IEnumerable<TSource>> Where<TSource>(
         this Task<IEnumerable<TSource>> @this, Func<TSource, int, bool> func)
             => @this.Get(x => x.OrEmpty().Where(func));
+
+        public static Task<IEnumerable<TSource>> WhereAsync<TSource>(
+        this Task<IEnumerable<TSource>> @this, Func<TSource, Task<bool>> func)
+         => @this.Get(x => x.OrEmpty().Where(func));
 
         public static Task<IEnumerable<TResult>> Zip<TSource, TSecond, TResult>(
         this Task<IEnumerable<TSource>> @this, IEnumerable<TSecond> second, Func<TSource, TSecond, TResult> func)

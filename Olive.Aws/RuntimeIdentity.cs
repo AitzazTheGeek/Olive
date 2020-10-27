@@ -22,6 +22,7 @@ namespace Olive.Aws
 
         static IConfiguration Config;
         public static AWSCredentials Credentials { get; private set; }
+        static AmazonSecurityTokenServiceClient TokenServiceClient;
 
         static ILogger Log => Olive.Log.For(typeof(RuntimeIdentity));
 
@@ -30,6 +31,7 @@ namespace Olive.Aws
             Config = config;
             RoleArn = Environment.GetEnvironmentVariable(VARIABLE);
             Environment.SetEnvironmentVariable(VARIABLE, null);
+            TokenServiceClient = new AmazonSecurityTokenServiceClient();
 
             Log.Info("Runtime role ARN > " + RoleArn);
 
@@ -40,9 +42,11 @@ namespace Olive.Aws
         [EscapeGCop("This is a background process")]
         static async void KeepRenewing()
         {
+            var interval = Config.GetValue("Aws:Identity:RenewalInterval", 300).Minutes();
+
             while (true)
             {
-                await Task.Delay(5.Hours());
+                await Task.Delay(interval);
                 try
                 {
                     await Renew();
@@ -54,7 +58,7 @@ namespace Olive.Aws
                 }
             }
         }
-        
+
         static async Task Renew()
         {
             Log.Info("Requesting AssumeRole: " + RoleArn + "...");
@@ -69,18 +73,20 @@ namespace Olive.Aws
 
             try
             {
-                using (var client = new AmazonSecurityTokenServiceClient())
+                var response = await TokenServiceClient.AssumeRoleAsync(request);
+                Log.Debug("AssumeRole response code: " + response.HttpStatusCode);
+                var credentials = response.Credentials;
+
+                FallbackCredentialsFactory.Reset();
+                FallbackCredentialsFactory.CredentialsGenerators.Insert(0, () =>
                 {
-                    var response = await client.AssumeRoleAsync(request);
-                    Log.Debug("AssumeRole response code: " + response.HttpStatusCode);
-                    var credentials = response.Credentials;
-
-                    FallbackCredentialsFactory.Reset();
-                    FallbackCredentialsFactory.CredentialsGenerators.Insert(0, () => credentials);
-
-                    Log.Debug("Obtained assume role credentials.");
-
+                    Log.Debug("Generating credentials => " + credentials.AccessKeyId.Substring(20) + " of total : " + FallbackCredentialsFactory.CredentialsGenerators.Count);
+                    return credentials;
                 }
+                );
+
+                Log.Debug("Obtained assume role credentials." + credentials.AccessKeyId.Substring(20));
+
             }
             catch (Exception ex)
             {

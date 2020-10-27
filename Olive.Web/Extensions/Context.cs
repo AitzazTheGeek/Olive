@@ -9,7 +9,7 @@ namespace Olive
 {
     partial class OliveWebExtensions
     {
-        static IHostingEnvironment environment;
+        static IWebHostEnvironment environment;
 
         public static ClaimsPrincipal User(this Context context)
             => context.Http()?.User;
@@ -24,14 +24,7 @@ namespace Olive
 
         public static HttpResponse Response(this Context context) => context.Http()?.Response;
 
-        public static IHostingEnvironment Environment(this Context context)
-            => environment
-            ?? throw new Exception("Environment is not set via Context.Configure()");
-
-        public static Context Set(this Context context, IHostingEnvironment env)
-        {
-            environment = env;
-            return context;
-        }
+        public static IWebHostEnvironment Environment(this Context context)
+            => environment ?? (environment = context.GetService<IWebHostEnvironment>());
     }
 }

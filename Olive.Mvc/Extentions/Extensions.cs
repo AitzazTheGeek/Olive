@@ -113,6 +113,12 @@ namespace Olive.Mvc
             return query;
         }
 
+        /// <summary>
+        /// Sort.Expression null safe version of the OrderBy(ListSortExpression).
+        /// </summary>
+        public static T Sort<T>(this T @this, ListSortExpression sort)
+            where T : IDatabaseQuery => sort.Expression.HasValue() ? @this.OrderBy(sort) : @this;
+
         public static IMvcBuilder Mvc(this Context @this) => @this.GetService<IMvcBuilder>();
 
         public static TAttribute GetAttribute<TAttribute>(this ModelMetadata @this) where TAttribute : System.Attribute
@@ -142,6 +148,11 @@ namespace Olive.Mvc
         {
             return (JavascriptActions)(context.Items["JavascriptActions"] ??
                   (context.Items["JavascriptActions"] = new JavascriptActions()));
+        }
+
+        internal static void ClearJavascriptActions(this HttpContext context)
+        {
+            context.Items["JavascriptActions"] = new JavascriptActions();
         }
 
         internal static string OnLoaded(this IEnumerable<JavascriptDependency> dependencies, string javaScript)

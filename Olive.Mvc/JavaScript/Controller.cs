@@ -1,6 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using System;
 using Microsoft.AspNetCore.Mvc;
-using System;
 
 namespace Olive.Mvc
 {
@@ -25,6 +24,16 @@ namespace Olive.Mvc
             return JavaScript(module.GenerateLoad(staticFunctionInvokation));
         }
 
+        /// <summary>
+        /// Loads a Javascript (or Typescript) service module upon page startup.
+        /// </summary>
+        [NonAction]
+        public virtual JsonResult JavaScript(JavascriptService service)
+        {
+            JavascriptActions.Add(service);
+            return JsonActions();
+        }
+
         /// <param name="javascriptCode">The code to run after a set of javascritp dependencies are loaded.</param>
         [NonAction]
         public JsonResult JavaScript(JavascriptDependency[] dependencies, string javascriptCode)
@@ -32,7 +41,7 @@ namespace Olive.Mvc
             return JavaScript(dependencies.OnLoaded(javascriptCode));
         }
 
-        [Obsolete("Instead, use JavaScript(new JavaScriptModule(...)).", error: true)]
+        [NonAction, Obsolete("Instead, use JavaScript(new JavaScriptModule(...)).", error: true)]
         public virtual void LoadJavascriptModule(string relativePath, string staticFunctionInvokation = "run()")
         {
             JavaScript(JavascriptModule.Relative(relativePath), staticFunctionInvokation);

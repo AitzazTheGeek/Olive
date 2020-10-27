@@ -6,13 +6,14 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+    using System.Threading.Tasks;
 
     public abstract class EncryptedEntityInterceptor
     {
         internal static string EncryptionKey;
         internal static Dictionary<Type, PropertyInfo[]> EncryptedProperties;
 
-        internal static void Initialize(Assembly domainAssembly)
+        public static void Initialize(Assembly domainAssembly)
         {
             if (EncryptionKey.HasValue())
                 throw new InvalidOperationException("Inizialize");
@@ -40,6 +41,21 @@
             }
 
             return result;
+        }
+
+        protected Task Process(IEntity entity, Func<string, string, string> valueConverter)
+        {
+            var properties = EncryptedProperties.GetOrDefault(entity.GetType());
+            if (properties.None()) return Task.CompletedTask;
+
+            foreach (var property in properties)
+            {
+                var clean = (string)property.GetValue(entity);
+                if (clean.HasValue())
+                    property.SetValue(entity, valueConverter(clean, EncryptionKey));
+            }
+
+            return Task.CompletedTask;
         }
     }
 }

@@ -1,19 +1,35 @@
-﻿using Olive;
+﻿using MSharp.Build.Installers;
+using Olive;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace MSharp.Build.Tools
 {
     abstract class BuildTool
     {
-        protected abstract FileInfo Installer { get; }
+        protected abstract Installer WindowsInstaller { get; }
+        protected abstract Installer LinuxInstaller { get; }
+        protected Installer Installer
+        {
+            get
+            {
+                if (Runtime.OS == OSPlatform.Windows)
+                    return WindowsInstaller;
+
+                if (Runtime.OS == OSPlatform.Linux)
+                    return LinuxInstaller;
+
+                throw new NotSupportedException(Runtime.OS.ToString());
+            }
+        }
         protected abstract string Name { get; }
-        protected abstract string InstallCommand { get; }
 
         public FileInfo Path { get; set; }
-        public abstract FileInfo ExpectedPath { get; }
 
         protected virtual void OnInstalled() { }
 
@@ -21,86 +37,31 @@ namespace MSharp.Build.Tools
 
         public List<string> Logs = new List<string>();
 
-        public FileInfo Install()
+        public void Install()
         {
             if (!AlwaysInstall)
-                if (IsInstalled()) return Path;
+                if (Installer.IsInstalled()) ;
 
             var log = Execute();
             Logs.Add(log);
 
-            AddToPath();
+            Installer.AddToPath();
 
             OnInstalled();
 
-            if (IsInstalled()) return Path;
-            else throw new Exception($"Failed to install {Name}. Install it manually.");
+            if (!Installer.IsInstalled())
+                throw new Exception($"Failed to install {Name}. Install it manually.");
         }
 
         protected virtual string Execute()
         {
-            if (Installer == WindowsCommand.Chocolaty)
-            {
-                var wrappedCommand = $"-noprofile -command \"&{{ start-process -FilePath '{Installer.FullName}' -ArgumentList '{InstallCommand} -y' -Wait -Verb RunAs}}\"";
-
-                Logs.Add("Elavating to powershell command: " + wrappedCommand);
-
-                return WindowsCommand.Powershell.Execute(wrappedCommand);
-            }
-            else
-            {
-                return Installer.Execute(InstallCommand);
-            }
+            return Installer.Install();
         }
 
-        protected bool IsInstalled()
+        internal FileInfo GetActualPath()
         {
-            try
-            {
-                Path = WindowsCommand.Where.Execute(Name).Trim().ToLines()
-                    .Select(x => x.AsFile()).First(x => x.Extension.HasValue());
-                return true;
-            }
-            catch
-            {
-                if (ExpectedPath != null && File.Exists(ExpectedPath.FullName))
-                {
-                    Path = ExpectedPath;
-                    return true;
-                }
-
-                Path = null;
-                return false;
-            }
-        }
-
-        void AddToPath()
-        {
-            var toCheck = new[] { Path, ExpectedPath }.Where(x => x != null).ToArray();
-            var path = toCheck.FirstOrDefault(x => File.Exists(x.FullName));
-
-            Path = path ?? throw new Exception("Failed to locate the installed tool: " +
-                Name + Environment.NewLine + "Searched:\r\n" + string.Join("\r\n", toCheck.Select(x => x.FullName)));
-
-            var parts = Environment.GetEnvironmentVariable("PATH").TrimOrEmpty().Split(';')
-            .Concat(new[] { path.Directory.FullName })
-            .Select(x => x + "\\")
-            .Select(x => x.Replace("\\\\", "\\"))
-            .Distinct()
-            .OrderBy(x => x.Contains("\\."));
-
-            var newPath = string.Join(";", parts);
-
-            Environment.SetEnvironmentVariable("PATH", newPath);
-            Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-
-            try
-            {
-                Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.Machine);
-            }
-            catch
-            {
-            }
+            if (Installer.IsInstalled()) return Path;
+            throw new Exception(Name + " does not seem to be installed");
         }
     }
 }

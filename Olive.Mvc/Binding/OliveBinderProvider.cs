@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+using Microsoft.Extensions.Logging;
 using Olive.Entities;
 using System;
 using System.Collections.Concurrent;
@@ -26,14 +27,14 @@ namespace Olive.Mvc
                 var propertyBinders = GetProperties(context.Metadata)
                     .ToDictionary(property => property, context.CreateBinder);
 
-                return new OliveModelBinder(propertyBinders);
+                return new OliveModelBinder(propertyBinders, Context.Current.GetService<ILoggerFactory>());
             }
 
             if (modelType.IsA<ListSortExpression>()) return new ListSortExpressionBinder();
 
             if (modelType.IsA<ColumnSelection>()) return new ColumnSelectionBinder();
             if (modelType.IsA<IEntity>()) return new EntityModelBinder(modelType);
-            if (modelType.IsA<Blob>() || modelType.IsA<List<Blob>>()) return new BlobModelBinder();
+            if (modelType.IsA<BlobViewModel>()) return new BlobViewModelModelBinder();
 
             if (PrimitiveTypes.Contains(modelType)) return new PrimitiveValueModelBinder();
 
@@ -60,6 +61,7 @@ namespace Olive.Mvc
             if (modelType.IsA<List<Guid>>()) modelBinder = new ListModelBinder<Guid>();
             if (modelType.IsA<List<string>>()) modelBinder = new ListModelBinder<string>();
             if (modelType.IsA<List<int>>()) modelBinder = new ListModelBinder<int>();
+            if (modelType.IsA<List<long>>()) modelBinder = new ListModelBinder<long>();
             if (modelType.IsA<List<bool>>()) modelBinder = new ListModelBinder<bool>();
             if (modelType.IsA<List<double>>()) modelBinder = new ListModelBinder<double>();
             if (modelType.IsA<List<decimal>>()) modelBinder = new ListModelBinder<decimal>();

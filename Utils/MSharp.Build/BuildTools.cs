@@ -9,9 +9,10 @@ namespace MSharp.Build
     {
         protected override void AddTasks()
         {
-            Add(() => InstallChocolatey());
-            Add(() => InstallDotnetCoreSdk());
+            Console.WriteLine("Help: http://learn.msharp.co.uk/#/Install/README");
+
             Add(() => InstallReplaceInFiles());
+            Add(() => InstallAcceleratePackageRestore());
             Add(() => InstallNodeJs());
             Add(() => InstallYarn());
             Add(() => InstallTypescript());
@@ -19,26 +20,26 @@ namespace MSharp.Build
             Add(() => InstallBower());
         }
 
-        void InstallChocolatey() => WindowsCommand.Chocolaty = Install<Chocolatey>();
-
-        void InstallDotnetCoreSdk() => WindowsCommand.DotNet = Install<DotNet>();
-
         void InstallReplaceInFiles() => Install<ReplaceInFile>();
+        void InstallAcceleratePackageRestore() => Install<AcceleratePackageRestore>();
 
-        void InstallNodeJs() => WindowsCommand.NodeJs = Install<NodeJs>();
+        void InstallNodeJs() => Install<NodeJs>();
 
-        void InstallYarn() => WindowsCommand.Yarn = Install<Yarn>();
+        void InstallYarn() => Install<Yarn>();
 
-        void InstallTypescript() => WindowsCommand.TypeScript = Install<Typescript>();
+        void InstallTypescript() => Install<Typescript>();
 
-        void InstallWebPack() => WindowsCommand.WebPack = Install<WebPack>();
+        void InstallWebPack() => Install<WebPack>();
 
-        void InstallBower() => WindowsCommand.Bower = Install<Bower>();
+        void InstallBower() => Install<Bower>();
 
-        FileInfo Install<T>([CallerMemberName] string step = "") where T : BuildTool, new()
+        void Install<T>([CallerMemberName] string step = "") where T : BuildTool, new()
         {
             var builder = new T();
-            try { return builder.Install(); }
+            try
+            {
+                builder.Install();
+            }
             finally { Log(string.Join(Environment.NewLine, builder.Logs), step); }
         }
     }

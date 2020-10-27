@@ -3,6 +3,7 @@
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Html;
     using Microsoft.AspNetCore.Mvc.Rendering;
+    using Microsoft.Extensions.Hosting;
     using System;
     using System.Linq;
     using System.Text;
@@ -22,7 +23,7 @@
             if (!Context.Current.Environment().IsDevelopment()) return null;
 
             if (IsUITestExecutionMode)
-                @this.RunJavascript("loadModule('olive/plugins/sanityAdapter', m => m.default.enable());");
+                @this.RunJavascript(new JavascriptService("sanityAdapter", "enable"));
 
             var commands = Context.Current.GetServices<IDevCommand>()
                 .Where(x => x.IsEnabled() && x.Title.HasValue()).ToArray();

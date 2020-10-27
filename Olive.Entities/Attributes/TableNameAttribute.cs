@@ -17,11 +17,11 @@ namespace Olive.Entities
 
         public static string GetTableName(Type entityType)
         {
-            var result = entityType.GetCustomAttribute<TableNameAttribute>()?.TableName;
+            var result = entityType.GetCustomAttribute<TableNameAttribute>(inherit: false)?.TableName;
             if (result.HasValue()) return result;
 
-            var title = entityType.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName;
-            title = title.Or(entityType.Name.ToProperCase());
+            var title = entityType.GetCustomAttribute<DisplayNameAttribute>(inherit: false)?.DisplayName;
+            title = title.Or(entityType.Name.ToLiteralFromPascalCase());
 
             return title.ToPlural().ToPascalCaseId();
         }

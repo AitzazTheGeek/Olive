@@ -1,48 +1,76 @@
 ﻿using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.Extensions.Primitives;
 using Olive.Entities;
 using System;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Olive.Mvc
 {
-    class DefaultFileUploadMarkupGenerator
+    public class DefaultFileUploadMarkupGenerator : IFileUploadMarkupGenerator
     {
-        public IHtmlContent Generate<TModel, TProperty>(IHtmlHelper html, object model, Expression<Func<TModel, TProperty>> property, object htmlAttributes)
+        readonly object LockObject = new object();
+        readonly object HiddenFieldSettings = new
         {
-            var propertyInfo = property.GetProperty();
-            var blob = propertyInfo.GetValue(model) as Blob ?? Blob.Empty();
-            var value = html.ViewContext.HttpContext.Request.HasFormContentType ?
-                html.ViewContext.HttpContext.Request.Form[propertyInfo.Name] :
-                Microsoft.Extensions.Primitives.StringValues.Empty;
-            if (value == "KEEP")
-            {
-                var itemProperty = model.GetType().GetProperty("Item");
-                var item = itemProperty.GetValue(model);
-                var originalPropertyInfo = item.GetType().GetProperty(propertyInfo.Name);
-                blob = originalPropertyInfo.GetValue(item) as Blob ?? Blob.Empty();
-            }
+            tabindex = "-1",
+            style = "width:1px; height:0; border:0; padding:0; margin:0;",
+            @class = "validation",
+            autocomplete = "off"
+        };
 
-            // Note: If this method is called with an IEnumerable<Blob> property,
-            // then the existing data will never be loaded.
+        PropertyInfo PropertyInfo;
+        BlobViewModel Blob;
+
+        public IHtmlContent Generate<TModel, TProperty>(IHtmlHelper html, object viewModel, Expression<Func<TModel, TProperty>> property, object htmlAttributes)
+        {
+            lock(LockObject)
+                return DoGenerate(html, viewModel, property, htmlAttributes);
+        }
+
+        protected virtual IHtmlContent DoGenerate<TModel, TProperty>(IHtmlHelper html, object viewModel, Expression<Func<TModel, TProperty>> property, object htmlAttributes)
+        {
+            if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
+            if (property == null) throw new ArgumentNullException(nameof(property));
+
+            PropertyInfo = property.GetProperty();
+            Blob = PropertyInfo.GetValue(viewModel) as BlobViewModel ?? new BlobViewModel();
+
             var result = new HtmlContentBuilder();
 
-            result.AppendHtmlLine("<div class=\"file-upload\">");
-            result.AppendHtmlLine($"<span class=\"current-file\" aria-label=\"Preview the file\"{" style=\"display:none\"".OnlyWhen(blob.IsEmpty())}>" +
-                $"<a target=\"_blank\" href=\"{blob.Url().HtmlEncode()}\">{blob.FileName.OrEmpty().HtmlEncode()}</a></span>");
-
-            result.AppendHtmlLine($"<label for=\"{propertyInfo.Name}_fileInput\" hidden>HiddenLabel</label>");
-            result.AppendHtmlLine($"<input type=\"file\" id=\"{propertyInfo.Name}_fileInput\" name=\"files\" {OliveMvcExtensions.ToHtmlAttributes(htmlAttributes)}/>");
-
-            // For validation to work, this works instead of Hidden.
-            if (value.ToString().IsEmpty() && blob.HasValue()) value = "KEEP";
-            result.AppendHtml(html.TextBox(propertyInfo.Name, value.OrEmpty(), string.Empty,
-                new { tabindex = "-1", style = "width:1px; height:0; border:0; padding:0; margin:0;", @class = "file-id", autocomplete = "off" }));
-            result.AppendHtmlLine("<div class=\"progress-bar\" role=\"progressbar\"></div>");
-            result.AppendHtmlLine("<span class=\"delete-file fa fa-remove btn\" style=\"display: none\"></span>");
-            result.AppendHtmlLine("</div>");
+            result.AppendHtmlLine($@"
+                <div class=""file-upload"">
+                    <span class=""current-file"" aria-label=""Preview the file""{" style=\"display:none\"".OnlyWhen(Blob.IsEmpty)}>
+                        <a target=""_blank"" href=""{Blob.Url?.HtmlEncode()}"">{Blob.Filename.OrEmpty().HtmlEncode()}</a>
+                    </span>
+                    <label for={GetId("fileInput")} hidden>HiddenLabel</label>
+                    {html.TextBox(PropertyInfo.Name, "value".OnlyWhen(Blob.HasValue), string.Empty, HiddenFieldSettings).GetString()}
+                    <input type=""file"" id={GetId("fileInput")} name=""files"" {GetHtmlAttributes(htmlAttributes)}/>
+                    {GetHiddenInput(x => x.Action)}
+                    {GetHiddenInput(x => x.TempFileId)}
+                    {GetHiddenInput(x => x.Filename)}
+                    {GetHiddenInput(x => x.ItemId)}
+                    {GetHiddenInput(x => x.Url)}
+                    {GetHiddenInput(x => x.IsEmpty)}
+                    <div class=""progress-bar"" role=""progressbar""></div>
+                    <span class=""delete-file fa fa-remove btn"" style=""display: none""></span>
+                </div>
+            ");
 
             return result;
+        }
+
+        protected virtual string GetHtmlAttributes(object htmlAttributes) =>
+            OliveMvcExtensions.ToHtmlAttributes(htmlAttributes);
+
+        string GetId(string prop) => $"\"{PropertyInfo.Name}_{prop}\"";
+
+        string GetHiddenInput(Expression<Func<BlobViewModel, object>> expression)
+        {
+            var propName = expression.GetProperty().Name;
+            var id = GetId(propName);
+            var func = expression.Compile();
+            return $@"<input type=""hidden"" id={id} name={id} class=""{propName}"" value=""{func(Blob)}"" />";
         }
     }
 }

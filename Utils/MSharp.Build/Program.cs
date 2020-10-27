@@ -18,7 +18,7 @@ namespace MSharp.Build
             if (args.Lacks("-notools"))
             {
                 var buildTools = new BuildTools();
-                result = Run(buildTools.Build, buildTools.PrintLog);
+                result = Run(() => buildTools.Build(), buildTools.PrintLog);
                 if (result != 0) return result;
             }
 
@@ -30,7 +30,7 @@ namespace MSharp.Build
                 Console.WriteLine();
 
                 var solution = new OliveSolution(root, publish: args.Contains("-publish"));
-                result = Run(solution.Build, solution.PrintLog);
+                result = Run(() => solution.Build(), solution.PrintLog);
             }
 
             return result;

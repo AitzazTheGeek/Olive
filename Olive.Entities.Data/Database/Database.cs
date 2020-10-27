@@ -11,7 +11,8 @@ namespace Olive.Entities.Data
     /// </summary>
     public partial class Database : IDatabase
     {
-        private readonly ICache Cache;
+       public ICache Cache { get; private set; }
+
         /// <summary>
         /// Initialize instance of Database by injecting ICache dependency
         /// </summary>
@@ -22,7 +23,12 @@ namespace Olive.Entities.Data
 
         bool NeedsTypeResolution(Type type) => type.IsInterface || type == typeof(Entity);
 
-        public AsyncEvent CacheRefreshed { get; } = new AsyncEvent();
+        public event AwaitableEventHandler CacheRefreshed;
+
+        /// <summary>
+        /// It's raised when any record is saved or deleted in the system.
+        /// </summary>
+        public event AwaitableEventHandler<IEntity> Updated;
 
         /// <summary>
         /// Clears the cache of all items.

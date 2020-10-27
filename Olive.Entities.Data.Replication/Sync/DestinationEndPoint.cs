@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Olive.Entities.Replication
 {
-    public abstract class DestinationEndpoint
+    public abstract partial class DestinationEndpoint
     {
         Assembly DomainAssembly;
         internal IEventBusQueue PublishQueue, RefreshQueue;
@@ -38,15 +38,40 @@ namespace Olive.Entities.Replication
         /// is empty, it will fetch the full data. </summary>
         public async Task Subscribe()
         {
+            await EnsureRefreshData();
+
+            PublishQueue.Subscribe<ReplicateDataMessage>(Import);
+        }
+
+        public async Task PullAll()
+        {
+            var start = LocalTime.Now;
+            await PublishQueue.PullAll<ReplicateDataMessage>(Import);
+            Log.For(this).Info("Pulled from queue in " + LocalTime.Now.Subtract(start).ToNaturalTime());
+        }
+
+        async Task EnsureRefreshData()
+        {
             foreach (var item in Subscribers.Values)
             {
                 if (await Database.Of(item.DomainType).None())
                     await item.RefreshData();
             }
-
-            PublishQueue.Subscribe<ReplicateDataMessage>(Import);
         }
 
-        Task Import(ReplicateDataMessage message) => Subscribers[message.TypeFullName].Import(message);
+        async Task Import(ReplicateDataMessage message)
+        {
+            if (message == null) return;
+
+            try
+            {
+                await Subscribers[message.TypeFullName].Import(message);
+            }
+            catch (Exception ex)
+            {
+                Log.For(this).Error(ex, "Failed to import ReplicateDataMessage " + message.Entity);
+                throw;
+            }
+        }
     }
 }

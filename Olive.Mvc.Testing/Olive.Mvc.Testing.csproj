@@ -1,31 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <PackageId>Olive.Testing</PackageId>
-    <Version>1.0.84</Version>
+    <FileVersion>3.1.0.0</FileVersion>
+    <AssemblyVersion>3.1.0.1</AssemblyVersion>
+    <Version>3.1.100</Version>
     <Title>Olive Testing (Service)</Title>
     <Authors>Geeks Ltd</Authors>
     <PackageProjectUrl>https://github.com/Geeksltd/Olive</PackageProjectUrl>
     <PackageIconUrl>http://licensing.msharp.co.uk/Images/OliveComponent.png</PackageIconUrl>
-    <Copyright>Copyright ©2018 Geeks Ltd - All rights reserved.</Copyright>
+    <Copyright>Copyright ©2020 Geeks Ltd - All rights reserved.</Copyright>
     <Description>Olive Framework</Description>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\bin\</OutputPath>
-    <DocumentationFile>..\bin\netcoreapp2.1\Olive.Mvc.Testing.xml</DocumentationFile>
+    <DocumentationFile>..\bin\netcoreapp3.1\Olive.Mvc.Testing.xml</DocumentationFile>
     <NoWarn>1701;1702;1705;1591;1573;NU1701</NoWarn>
+    <PackageVersion>3.1.103</PackageVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="GCop.All.Geeks" Version="2.4.4" />
-    <PackageReference Include="Microsoft.AspNetCore.App" Version="2.1.4" />
-    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
-    <PackageReference Include="System.Security.Principal" Version="4.3.0" />
+    <Compile Remove="Contracts\**" />
+    <EmbeddedResource Remove="Contracts\**" />
+    <None Remove="Contracts\**" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Olive">
       <HintPath>..\bin\netstandard2.0\Olive.dll</HintPath>
       <Private>false</Private>
+    </Reference>
+    <Reference Include="Olive.Csv">
+      <HintPath>..\bin\netstandard2.0\Olive.Csv.dll</HintPath>
     </Reference>
     <Reference Include="Olive.Entities">
       <HintPath>..\bin\netstandard2.0\Olive.Entities.dll</HintPath>
@@ -38,17 +41,9 @@
     <Reference Include="Olive.Export">
       <HintPath>..\bin\netstandard2.0\Olive.Export.dll</HintPath>
     </Reference>
-    <Reference Include="Olive.Mvc">
-      <HintPath>..\bin\netcoreapp2.1\Olive.Mvc.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Olive.Web">
-      <HintPath>..\bin\netcoreapp2.1\Olive.Web.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Contracts\" />
+    <ProjectReference Include="..\Olive.Mvc\Olive.Mvc.csproj" />
   </ItemGroup>
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <Exec Command="update-local-nuget-cache $(ProjectPath) $(TargetPath) $(TargetName)" />

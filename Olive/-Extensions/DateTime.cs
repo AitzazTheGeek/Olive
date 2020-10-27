@@ -1,5 +1,4 @@
-
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -174,7 +173,10 @@ new DateTime(2099,04,13)};
         /// Dictionary that contains exceptional dates for Early May Bank Holiday.
         /// Key: Year, Value: Exceptional Date for that year.
         /// </summary>
-        static Dictionary<int, DateTime> EarlyMayExceptions = new Dictionary<int, DateTime>();
+        static Dictionary<int, DateTime> EarlyMayExceptions = new Dictionary<int, DateTime>
+        {
+            {2020,new DateTime(2020,05,08)}
+        };
 
         #region SpringBankHolidayExceptions
 
@@ -567,6 +569,7 @@ new DateTime(2099,04,13)};
             if (@this == null) return null;
             return ToTimeDifferenceString(@this.Value, precisionParts, longForm);
         }
+
         /// <summary>
         /// Gets the difference day and time between this date and now.
         /// </summary>
@@ -675,6 +678,7 @@ new DateTime(2099,04,13)};
 
             return result;
         }
+
         /// <summary>
         /// Gets useful and readable format of the date.
         /// </summary>
@@ -755,7 +759,7 @@ new DateTime(2099,04,13)};
             // For each working day in the range, calculate relevant times
             for (var day = @this.Date; day < @this.Add(period); day = day.AddWorkingDays(1, considerEnglishBankHolidays))
             {
-                if (!day.IsWeekend() && !(day.IsEnglishHoliday() && considerEnglishBankHolidays)) 
+                if (!day.IsWeekend() && !(day.IsEnglishHoliday() && considerEnglishBankHolidays))
                 {
                     foreach (var range in workingTimesInday)
                     {

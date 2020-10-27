@@ -1,26 +1,348 @@
 
 # Olive compatibility change log
 
+## 26 Oct 2020
+Upgrade MSharp nuget to the latest version. Then change the following at the end of your `#Model.csproj`:
+```xml
+<Target Name="Generate code" AfterTargets="AfterBuild">
+   <Exec Condition="'$(MSHARP_BUILD)' != 'FULL'" WorkingDirectory="$(TargetDir)" Command="dotnet msharp.dsl.dll /build /model" />
+   <Exec Condition="'$(MSHARP_BUILD)' != 'FULL'" WorkingDirectory="$(TargetDir)" Command="start &quot;&quot; msharp /diagnose" />
+</Target>
+```
+
+Do the same in #UI.csproj but change `/model` to `/ui`.
+
+Previously, the code generation, and the design-time diagnostics (warnings, extension related files, etc) happened at the same time. This slowed down the build process. The above change will fix it so that:
+
+- The `build` part (code generation) happens as part of the build, so that any issues still correctly break the build process.
+- The diagnostics command is then executed in another process without slowing down your dev/build actions.
+
+## 25 August 2020
+We have moved `RegisterDataProvider()` method from `IDatabase` interface to `IDatabaseProviderConfig`. So if you have used something like this `Context.Current.Database().RegisterDataProvider(typeof(Service), new DataProvider());` please change it to this one:
+
+```c#
+var config = Context.Current.GetService<IDatabaseProviderConfig>();
+
+config.RegisterDataProvider(typeof(Service), new DataProvider());
+```
+
+
+## 29 June 2020
+- Replace `modifiedObjectType.IsCacheable()` with `Database.Cache().IsCacheable(modifiedObjectType)`
+
+## 26 June 2020
+We now support 3 database caching modes:
+- `off` means disabled
+- `single-server` is equivalent to the traditional enabled cache where everything is cached in memory statically, ideal for *vertical scaling*.
+- `multi-server` is a new mode where data is cached in the scope of *each http request*. 
+
+**Use the new mode instead of a disabled cache, for a significant performance boost in horizontally scaled applications.**
+
+In `appSettings.json` change the cache setting from:
+```json
+  "Database": {
+        ...
+        "Cache": {
+            "Enabled": true,
+            ...
+        },
+```
+to the following:
+```json
+  "Database": {
+        ...
+        "Cache": {
+            "Mode": "single-server",
+            ...
+        },
+```
+
+
+## 28 May 2020
+In the `SharedActionsController.cs` add IFileAccessorFactory the constructor like:
+```csharp
+    readonly IFileRequestService FileRequestService;
+    readonly IFileAccessorFactory FileAccessorFactory;
+
+    public SharedActionsController(
+        IFileRequestService fileRequestService,
+        IFileAccessorFactory fileAccessorFactory
+    )
+    {
+        FileRequestService = fileRequestService;
+	FileAccessorFactory = fileAccessorFactory;
+    }
+```
+Also, apply the following change:
+```csharp
+	// Remove
+	var accessor = await FileAccessor.Create(path, User);
+	// Add
+	var accessor = await FileAccessorFactory.Create(path, User);
+```
+
+## 12 May 2020
+In the `Model` project => `Project.cs` change the following part.
+
+From:
+```csharp
+AutoTask("Clean old temp uploads").Every(10, TimeUnit.Minute)
+    .Run("await Olive.Mvc.FileUploadService.DeleteTempFiles(olderThan: 1.Hours());");
+```
+
+To:
+```csharp
+AutoTask("Clean old temp uploads").Every(10, TimeUnit.Minute)
+    .Run(@"await Olive.Context.Current.GetService<Olive.Mvc.IFileRequestService>()
+    .DeleteTempFiles(olderThan: 1.Hours());");
+```
+Also, in the `SharedActionsController.cs` add a constructor like:
+```csharp
+    readonly IFileRequestService FileRequestService;
+
+    public SharedActionsController(IFileRequestService fileRequestService)
+    {
+        FileRequestService = fileRequestService;
+    }
+```
+And change `UploadTempFileToServer` to:
+```csharp
+    [HttpPost, Authorize, Route("upload")]
+    public async Task<IActionResult> UploadTempFileToServer(IFormFile[] files)
+    {
+        return Json(await FileRequestService.TempSaveUploadedFile(files[0]));
+    }
+```
+Also change `DownloadTempFile` to:
+```csharp
+    [Route("temp-file/{key}")]
+    public Task<ActionResult> DownloadTempFile(string key) => FileRequestService.Download(key);
+```
+
+## 23 Apr 2020
+You can now specify the location where the temp uploaded files are stored. You need only one of the following settings.
+```json
+...
+  "Blob": {
+    "TempFileAbsolutePath": "",
+    "TempFilePath": "",
+  },
+...
+```
+
+## 16 Apr 2020
+A new property named `ItemGroup` is added to `IAuditEvent` so you need add the same to its implementer entity in your project.
+
+
+## 31 Mar 2020
+The `Entity` and `GlobalEntityEvents` classes have a number of lifecycle events such as `Saving`, `Saved`, etc.
+Previously these were of the type `AsyncEvent`. That type is removed from Olive altogether due to the performance and memory management issues that it caused. Instead, those events are changed into normal .NET events. This means that where ever you handled such events, you should now:
+- Use the `+=` operator rather than `.Handle()` method to attach handlers.
+- The event handler method should return `void` rather than `Task`
+- Your event handler argument should take `AwaitableEvent` or `AwaitableEvent<TArg>`
+- If your event handling logic is sync, you simply write the code in the event handler method.
+
+**Important:** If your event handler uses `await` you **should not** change the event handler to `async void`. Instead you should wrap your logic inside a call to the `Do(...)` method provided by the event handler method argument. For example:
+
+```csharp
+...
+// Attach handler
+GlobalEntityEvents.InstanceSaved.Handle(HandleInstanceSaved);
+...
+
+async Task HandleInstanceSaved(GlobalSaveEventArgs arg)
+{
+    ...
+    await Somethind();
+    ...
+}
+```
+
+should be now written as:
+
+```csharp
+...
+// Attach handler
+GlobalEntityEvents.InstanceSaved += HandleInstanceSaved;
+...
+void HandleInstanceSaved(AwaitableEvent<GlobalSaveEventArgs> ev)
+{
+    ev.Do(async args => 
+    {
+       ...
+       await Somethind();
+       ...
+    });
+}
+```
+
+
+
+
+## 26 Nov 2019
+You can remove `PredictableGuidEnabled` from the **appsettings.json**. As it is useless from now.
+Also, Config should be remove from calling the `AddDevCommands`.
+
+## 18 July 2019
+If you are migrating from `Olive.MvcJs < v2` to `Olive.MvcJs > v2` please check 
+[Javascript Fx (MvcJS) > Migration to version 2](https://geeksltd.github.io/Olive/#/MvcJS/MigrationAndDI) for the documentation.
+
+## 19 March 2019
+If your project is a Microservice, then:
+- add the nuget package `Olive.Mvc.Microservices` to the `Website` project.
+- In `Startup.cs` inherit from `Olive.Mvc.Microservices.Startup` and also remove `ConfigureSecurity(IApplicationBuilder app)`.
+- Your `BaseController` class should inherit from `Olive.Mvc.Microservices.Controller`.
+
+
+## 21 Feb 2019
+Add the following mapping line to your `references.js` as shown below.
+```javascript
+...
+map: {
+       	"*": {
+		....
+           	"jquery-sortable": "jquery-ui/ui/widgets/sortable",
+	}
+}
+...
+```
+
+## 23 Jan 2019
+Change the following part in the Startup.cs as mentioned.= below.
+
+```csharp
+public override void ConfigureServices(IServiceCollection services)
+{
+    base.ConfigureServices(services);
+    .
+    .
+    .
+    if (Environment.IsDevelopment())
+	services.AddDevCommands(x => x.AddTempDatabase<SqlServerManager, ReferenceData>());
+}
+```
+
+
+```csharp
+public override void ConfigureServices(IServiceCollection services)
+{
+    base.ConfigureServices(services);
+    .
+    .
+    .
+    if (Environment.IsDevelopment())
+	services.AddDevCommands(Configuration, x => x.AddTempDatabase<SqlServerManager, ReferenceData>());
+}
+```
+
+Also, in order to benefit from `PredictableGuidGenerator` for the Pangolin batch runner add the following setting to the `appsettings.josn`.
+
+```json
+{
+	"PredictableGuidEnabled": true
+}
+```
+
+## 4 Jan 2019
+M# will no longer generate the `DAL` files. They are handled at runtime now.
+
+- Delete the `[Gen-DAL]` folder from  your `Domain` project.
+
+- In **Domain.csproj**, remove the `[GEN-DAL]` folder form the project.
+
+- In **Website.csproj** in the `appsetting.json` file remove the `Database:Providers` section:
+```json
+"Database": {
+    "Providers": [
+        {
+            "AssemblyName": "Domain.dll",
+            "ProviderFactoryType": "AppData.AdoDotNetDataProviderFactory"
+        }
+    ],
+    ...
+}
+```
+Should be changed to
+```json
+"Database": {    
+    ...
+}
+```
+
+- In the `startup.cs`, add the following line:
+
+```csharp
+public override void ConfigureServices(IServiceCollection services)
+{
+    base.ConfigureServices(services);
+    services.AddDataAccess(x => x.SqlServer());
+    ...
+}
+```
+
+## 3 Jan 2019
+Update `#Model.csproj` and `#UI.csproj` files add `/warn` to the end of the AfterBuild commands.
+
+**#Model.csproj**
+```xml
+<Target Name="Generate code" AfterTargets="AfterBuild">
+    <Exec Condition="'$(MSHARP_BUILD)' != 'FULL'" WorkingDirectory="$(TargetDir)" 
+	  Command="dotnet msharp.dsl.dll /build /model /warn" />
+</Target>
+```
+**#UI.csproj**
+```xml
+<Target Name="Generate code" AfterTargets="AfterBuild">
+    <Exec Condition="'$(MSHARP_BUILD)' != 'FULL'" WorkingDirectory="$(TargetDir)" 
+	  Command="dotnet msharp.dsl.dll /build /ui /warn" />
+</Target>
+```
+
+
 ## 7 Dec 2018
 We have removed [Chosen](https://github.com/harvesthq/chosen) library and replaced it with [Bootstrap-select](https://github.com/snapappointments/bootstrap-select/), now you can safely remove `chosen` from your project.
-1. Open `package.json` or `bower.json` and remove `chosen` then update `olive.mvc` to the version `0.9.175`
-2. Open `references.js` and remove `chosen`
-3. Open `_common.scss` file and remove `chosen.css`
+1. Open `package.json` or `bower.json` and remove `chosen` then update `olive.mvc` to the version `0.9.175` and add `"bootstrap-select": "1.13.5",`
+2. Open `references.js` and remove `chosen` and add the following lines:
+```js
+requirejs.config({
+    baseUrl: '/lib',
+    paths: {
+        ....,
+        "bootstrap-select": "bootstrap-select/dist/js/bootstrap-select"
+    },
+    ...
+    shim: {
+        ...
+        "bootstrap-select": ['jquery', 'bootstrap'],
+	...
+        }
+	...
+});
+
+requirejs([...., "bootstrap-select"
+]);
+...
+```
+3. Open `_common.scss` file and remove `chosen.css` and add the following lines:
+```scss
+@import "../../lib/bootstrap-select/sass/variables";
+@import "../../lib/bootstrap-select/sass/bootstrap-select";
+```
 
 now your drop-down list will have default bootstrap style.
 
 ## 6 Dec 2018
 - In `Website.csproj` set `<MvcRazorCompileOnPublish>true</MvcRazorCompileOnPublish>`
 - In `Startup.cs` change use just `app.UseScheduledTasks<TaskManager>();` instead of the following block:
-```c#
+```csharp
 if (Config.Get<bool>("Automated.Tasks:Enabled"))
     app.UseScheduledTasks(TaskManager.Run);
 ```
 
 ## 4 Dec 2018
 In `Startup.cs` add an instance of `ILoggerFactory` to the constructor, and just pass it to the base constructor.
-```c#
-public Startup(IHostingEnvironment env, IConfiguration config, ILoggerFactory loggerFactory) 
+```csharp
+public Startup(IWebHostEnvironment env, IConfiguration config, ILoggerFactory loggerFactory) 
        : base(env, config, loggerFactory)`
 {
     ...
@@ -281,7 +603,7 @@ Make sure that with every release of your application, you increment this number
 ## 16 Sep 2018
 If you're using AWS server identity (microservices with containers) please remove `services.AddAwsIdentity();` from `ConfigureServices(IServiceCollection services)` and add the following method:
 ```csharp
-public Startup(IHostingEnvironment env, IConfiguration config) : base(env, config)
+public Startup(IWebHostEnvironment env, IConfiguration config) : base(env, config)
 {
     if (env.IsProduction()) config.LoadAwsIdentity();    
 }
@@ -313,7 +635,7 @@ As it has been mentioned on the `21 August 2018` changes, we don't have a confli
    * In case you're using other parameters, you can include those too.
    * But as a minimum you should provide the following two arguments to the base constructor.   
 ```
-public Startup(IHostingEnvironment env, IConfiguration config) : base(env, config) { }
+public Startup(IWebHostEnvironment env, IConfiguration config) : base(env, config) { }
 ```
 * Remove the `env` parameter from all the other methods in that class. Use the inherited `Environment` field instead.
 
@@ -399,7 +721,7 @@ M#/lib/*
 ## 02 May 2018
 - In `StartUp.cs` add the following method:
 ```csharp
-public override async Task OnStartUpAsync(IApplicationBuilder app, IHostingEnvironment env)
+public override async Task OnStartUpAsync(IApplicationBuilder app, IWebHostEnvironment env)
 {
     if (env.IsDevelopment())
         await app.InitializeTempDatabase<SqlServerManager>(() => ReferenceData.Create());
@@ -409,7 +731,7 @@ public override async Task OnStartUpAsync(IApplicationBuilder app, IHostingEnvir
 ```
 - In `StartUp.cs` update the `Configure(...)` method to the following:
 ```csharp
-public override void Configure(IApplicationBuilder app, IHostingEnvironment env)
+public override void Configure(IApplicationBuilder app, IWebHostEnvironment env)
 {
     base.Configure(app, env);
     if (env.IsDevelopment()) app.UseWebTest(config => config.AddTasks());
@@ -528,7 +850,7 @@ public override void ConfigureServices(IServiceCollection services)
     services.AddScheduledTasks();
 }
 
-public override void Configure(IApplicationBuilder app, IHostingEnvironment env)
+public override void Configure(IApplicationBuilder app, IWebHostEnvironment env)
 {
     app.UseWebTest(ReferenceData.Create, config => config.AddTasks().AddEmail());
     base.Configure(app, env);

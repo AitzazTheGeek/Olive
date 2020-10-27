@@ -2,58 +2,55 @@
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Olive
 {
     public partial class Context
     {
-        static Context current;
-        public IServiceProvider ServiceProvider { get; private set; }
-        public readonly IServiceCollection Services;
+        static Context current = new Context();
+        internal static Func<Context> ContextProvider = () => new Context();
+
+        IServiceProvider ApplicationServices;
+        Func<IServiceProvider> ScopeServiceProvider;
+        public IServiceProvider ServiceProvider => ScopeServiceProvider?.Invoke() ?? ApplicationServices;
 
         /// <summary>
         /// Occurs when the StartUp.OnInitializedAsync is completed.
         /// </summary>
-        public static readonly AsyncEvent StartedUp = new AsyncEvent();
+        public static event AwaitableEventHandler StartedUp;
 
-        public static Context Current => current
-            ?? throw new InvalidOperationException("Olive.Context is not initialized!");
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task OnStartedUp() => StartedUp.Raise();
 
-        Context(IServiceCollection services) => Services = services;
+        public static Context Current => current ?? throw new InvalidOperationException("Olive.Context is not initialized!");
 
-        public static void Initialize(IServiceCollection services) => current = new Context(services);
-
-        public Context Set(IServiceProvider provider)
+        public static Context Initialize(IServiceProvider applicationServices, Func<IServiceProvider> scopeServiceProvider)
         {
-            ServiceProvider = provider;
-            return this;
+            return current = new Context
+            {
+                ApplicationServices = applicationServices,
+                ScopeServiceProvider = scopeServiceProvider
+            };
         }
 
         /// <summary>
         /// Gets a required service of the specified contract type.
         /// </summary>
-        public TService GetService<TService>()
-        {
-            if (ServiceProvider == null)
-                throw new InvalidOperationException("Services are not registered yet as Olive.Context.Configure() is not called yet.");
-
-            return ServiceProvider.GetRequiredService<TService>();
-        }
+        public TService GetService<TService>() => ServiceProvider.GetRequiredService<TService>();
 
         public IConfiguration Config => GetService<IConfiguration>();
 
         public TService GetOptionalService<TService>() where TService : class
         {
-            var result = Current.ServiceProvider.GetService<TService>();
+            var result = ServiceProvider.GetService<TService>();
             if (result == null)
                 Debug.WriteLine(typeof(TService).FullName + " service is not configured.");
             return result;
         }
 
-        public IEnumerable<TService> GetServices<TService>() => Current.ServiceProvider.GetServices<TService>();
-
-        public void AddService(Type serviceType, object serviceInstance)
-            => Services.AddSingleton(serviceType, serviceInstance);
+        public IEnumerable<TService> GetServices<TService>() => ServiceProvider.GetServices<TService>();
     }
 }

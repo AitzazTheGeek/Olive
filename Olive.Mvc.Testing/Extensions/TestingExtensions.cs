@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Olive.Entities.Data;
 using System;
 
@@ -25,6 +26,8 @@ namespace Olive.Mvc.Testing
             services.AddSingleton<IDevCommand, DatabaseProfileSnapshotDevCommand>();
             services.AddSingleton<IDevCommand, DatabaseProfileStopDevCommand>();
 
+            services.AddSingleton<IDevCommand, CsvImportDataDevCommand>();
+
             return @this;
         }
 
@@ -32,6 +35,7 @@ namespace Olive.Mvc.Testing
             this IServiceCollection @this, Action<DevCommandsOptions> options = null)
         {
             Entities.GuidEntity.NewIdGenerator = PredictableGuidGenerator.Generate;
+
             @this.AddSingleton<IDevCommand, TestContextDevCommand>();
             @this.AddSingleton<IDevCommand, InjectTimeDevCommand>();
             @this.AddSingleton<IDevCommand, DatabaseClearCacheDevCommand>();
@@ -42,4 +46,3 @@ namespace Olive.Mvc.Testing
         }
     }
 }
-

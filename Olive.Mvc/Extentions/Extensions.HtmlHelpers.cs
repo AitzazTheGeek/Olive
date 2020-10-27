@@ -73,14 +73,16 @@ namespace Olive.Mvc
             return false;
         }
 
-        public static IHtmlContent FileUploadFor<TModel>(this IHtmlHelper<TModel> @this, Expression<Func<TModel, IEnumerable<Blob>>> property, object htmlAttributes = null)
+        public static IHtmlContent FileUploadFor<TModel>(this IHtmlHelper<TModel> @this, Expression<Func<TModel, IEnumerable<BlobViewModel>>> property, object htmlAttributes = null)
         {
-            return new DefaultFileUploadMarkupGenerator().Generate(@this, @this.ViewData.Model, property, htmlAttributes);
+            return Context.Current.GetService<IFileUploadMarkupGenerator>()
+                .Generate(@this, @this.ViewData.Model, property, htmlAttributes);
         }
 
-        public static IHtmlContent FileUploadFor<TModel>(this IHtmlHelper<TModel> @this, Expression<Func<TModel, Blob>> property, object htmlAttributes = null)
+        public static IHtmlContent FileUploadFor<TModel>(this IHtmlHelper<TModel> @this, Expression<Func<TModel, BlobViewModel>> property, object htmlAttributes = null)
         {
-            return new DefaultFileUploadMarkupGenerator().Generate(@this, @this.ViewData.Model, property, htmlAttributes);
+            return Context.Current.GetService<IFileUploadMarkupGenerator>()
+                .Generate(@this, @this.ViewData.Model, property, htmlAttributes);
         }
 
         public static HtmlString CheckBoxesFor<TModel, TProperty>(this IHtmlHelper<TModel> @this, Expression<Func<TModel, TProperty>> property, IEnumerable<SelectListItem> selectList, object htmlAttributes = null) =>
@@ -209,9 +211,9 @@ namespace Olive.Mvc
 
             var result = startupActions.HasValue() ? @this.Hidden("Startup.Actions", startupActions) : HtmlString.Empty;
 
-            var request = @this.ViewContext.HttpContext.Request;
+            @this.ClearActionsJson();
 
-            if (request.IsAjaxGet())
+            if (@this.Request().IsAjaxGet())
             {
                 var title = Context.Current.Http().Items["Page.Title"].ToStringOrEmpty().Or(@this.ViewData["Title"].ToStringOrEmpty());
                 result = result.Concat(@this.Hidden("page.meta.title", title));
@@ -220,8 +222,7 @@ namespace Olive.Mvc
             return result;
         }
 
-        public static HttpRequest Request(this IHtmlHelper @this) =>
-            @this.ViewContext.HttpContext.Request;
+        public static HttpRequest Request(this IHtmlHelper @this) => @this?.ViewContext?.HttpContext?.Request;
 
         /// <summary>
         /// Creates a hidden field to contain the json data for the start-up actions.
@@ -233,7 +234,11 @@ namespace Olive.Mvc
             var startupActions = @this.GetActionsJson().ToString().Unless("[]");
 
             if (startupActions.HasValue())
+            {
+                @this.ClearActionsJson();
+
                 return @this.Hidden("Startup.Actions", startupActions);
+            }
 
             return HtmlString.Empty;
         }
@@ -254,6 +259,17 @@ namespace Olive.Mvc
 
             if (!exists)
                 actions.Add(new { Script = script, Key = key, Stage = stage.ToString() });
+
+            return HtmlString.Empty;
+        }
+
+        public static HtmlString RunJavascript(this IHtmlHelper @this, JavascriptService service, PageLifecycleStage stage = PageLifecycleStage.Init)
+        {
+            var actions = @this.ViewContext.HttpContext.JavascriptActions();
+
+            var exists = actions.Any(x => x is JavascriptService j && j == service);
+
+            if (!exists) actions.Add(service);
 
             return HtmlString.Empty;
         }
@@ -281,6 +297,11 @@ namespace Olive.Mvc
                 return new HtmlString(items.Select(f => $"<script type='text/javascript' src='{f}'></script>").ToLinesString());
 
             return HtmlString.Empty;
+        }
+
+        static void ClearActionsJson(this IHtmlHelper @this)
+        {
+            @this.ViewContext.HttpContext.ClearJavascriptActions();
         }
     }
 }

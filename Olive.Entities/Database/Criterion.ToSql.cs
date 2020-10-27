@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 
@@ -10,6 +7,9 @@ namespace Olive.Entities
 {
     partial class Criterion
     {
+        static readonly ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>> PropertiesCache =
+            new ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>>();
+
         protected virtual bool NeedsParameter(SqlConversionContext context) => true;
 
         protected virtual object GetValue(SqlConversionContext context)
@@ -23,6 +23,8 @@ namespace Olive.Entities
 
         protected virtual string GetColumnName(SqlConversionContext context, string propertyName)
         {
+            ValidateProperty(context.Type, propertyName);
+
             var key = propertyName;
 
             if (key.EndsWith("Id") && key.Length > 2)
@@ -37,9 +39,32 @@ namespace Olive.Entities
             return context.Query.Column(key, context.Alias);
         }
 
+        void ValidateProperty(Type type, string propertyName)
+        {
+            var properties = PropertiesCache.GetOrAdd(type, t => new ConcurrentDictionary<string, bool>());
+
+            var @throw = properties.GetOrAdd(propertyName, prop =>
+            {
+                var propertyInfo = type.GetProperty(prop);
+
+                if (propertyInfo == null)
+                    throw new Exception($"{type.FullName} has no public property named '{prop}'.");
+
+                if (propertyInfo.Defines<EncryptedPropertyAttribute>()) return true;
+
+                var temp = propertyInfo.GetCustomAttribute<CustomDataConverterAttribute>(inherit: false);
+                if (temp != null && !(temp is EnumDataConverterAttribute)) return true;
+
+                return false;
+            });
+
+            if (@throw)
+                throw new Exception($"It is not possible to have criteria on '{propertyName}' as it is either encrypted or has custom data converter.");
+        }
+
         public virtual string ToSql(SqlConversionContext context)
         {
-                if (PropertyName.Contains(".")) return ToSubQuerySql(context);
+            if (PropertyName.Contains(".")) return ToSubQuerySql(context);
             else return ToSqlOn(context);
         }
 
@@ -51,6 +76,9 @@ namespace Olive.Entities
 
         string ToNestedSubQuerySql(SqlConversionContext context, string[] parts)
         {
+            if (context.Query.AliasPrefix.HasValue())
+                throw new NotSupportedException("Conditions on associations is not supported when query is a sub query.");
+
             var proc = new NestedCriteriaProcessor(context.Type, parts);
 
             var subCriterion = new Criterion(proc.Property.Name, FilterFunction, Value);
@@ -69,7 +97,7 @@ namespace Olive.Entities
                 Alias = context.ToSafeId(proc.TableAlias),
                 Query = context.Query,
                 ToSafeId = context.ToSafeId,
-                Type = proc.Property.PropertyType
+                Type = proc.Property.DeclaringType
             };
 
             r.Append(subCriterion.ToSqlOn(newContext));
@@ -111,7 +139,13 @@ namespace Olive.Entities
                 else return column + " " + function.GetDatabaseOperator() + " " + value;
             }
 
-            if(!NeedsParameter(context))
+            if (function == FilterFunction.NotIn)
+            {
+                if ((value as string) == "()") return "1 = 1 /*" + column + " Not IN ([empty])*/";
+                else return column + " " + function.GetDatabaseOperator() + " " + value;
+            }
+
+            if (!NeedsParameter(context))
                 return $"{column} {function.GetDatabaseOperator()} {value}";
 
             var parameterName = GetUniqueParameterName(context, column);

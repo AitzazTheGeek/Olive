@@ -11,7 +11,7 @@
     {
         Task<IDbConnection> GetOrCreateConnection();
 
-        Task<IDbConnection> CreateConnection(string connectionString = null);
+        Task<IDbConnection> CreateConnection();
 
         Task<IDataReader> ExecuteReader(string command, CommandType commandType = CommandType.Text, params IDataParameter[] @params);
 
@@ -24,5 +24,11 @@
         Task<T> ExecuteScalar<T>(string command, CommandType commandType = CommandType.Text, params IDataParameter[] @params);
 
         Task<int> ExecuteBulkNonQueries(CommandType commandType, List<KeyValuePair<string, IDataParameter[]>> commands);
+
+        IDataParameter CreateParameter(string name, object value);
+
+        IDataParameter CreateParameter(string name, object value, DbType? dbType);
+
+        ISqlCommandGenerator GetSqlCommandGenerator();
     }
 }

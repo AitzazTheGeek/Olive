@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 
 namespace MSharp.Build
 {
+
     abstract class Builder
     {
         static DateTime Start = DateTime.Now;

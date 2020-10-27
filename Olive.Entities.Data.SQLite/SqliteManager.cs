@@ -1,20 +1,24 @@
-﻿using System;
+﻿using Microsoft.Data.Sqlite;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
 
 namespace Olive.Entities.Data
 {
     public class SqLiteManager : DatabaseServer
     {
+        IDatabaseProviderConfig ProviderConfig;
+
+        public SqLiteManager(IDatabaseProviderConfig providerConfig) => ProviderConfig = providerConfig;
+
         SqliteConnection CreateConnection() => new SqliteConnection(DataAccess.GetCurrentConnectionString());
 
         public override void Delete(string databaseName)
         {
             Task<IDataReader> read()
             {
-                return new DataAccess<SqliteConnection>()
+                return new DataAccess<SqliteConnection>(ProviderConfig, new SqliteCommandGenerator())
                 .ExecuteReader("SELECT NAME FROM sqlite_master where type = 'table'");
             }
 
